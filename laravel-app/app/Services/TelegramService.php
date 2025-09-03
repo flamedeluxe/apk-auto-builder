@@ -114,7 +114,7 @@ class TelegramService
         return $this->sendMessage($chatId, $message);
     }
 
-    public function sendBuildStartKeyboard(Project $project): bool
+    public function sendBuildStartKeyboard(Project $project, bool $isGroup = false): bool
     {
         $message = "🔨 <b>{$project->application_name}</b>\n";
         $message .= "Выберите тип сборки:";
