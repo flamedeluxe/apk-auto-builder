@@ -1,0 +1,196 @@
+# Универсальный CI/CD для Android приложений
+# Используйте переменные окружения для настройки под конкретное приложение
+
+workflows:
+  build-release-and-publish-beta:
+    name: Build Release and publish to Beta
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      android_signing:
+        - system_app_manager
+      groups:
+        - google_play
+        - telegram
+        - laravel_webhook
+      vars:
+        # Эти переменные должны быть настроены в Codemagic для каждого проекта
+        APPLICATION_NAME: $APPLICATION_NAME
+        PACKAGE_NAME: $PACKAGE_NAME
+        BUILD_TYPE: $BUILD_TYPE  # debug, release
+        GRADLE_TASK: $GRADLE_TASK  # assembleDebug, bundleRelease, etc.
+        LARAVEL_WEBHOOK_URL: $LARAVEL_WEBHOOK_URL
+        PROJECT_ID: $PROJECT_ID
+      java: 21
+    scripts:
+      - name: Report build start to Laravel
+        script: |
+          curl -s -X POST "$LARAVEL_WEBHOOK_URL/api/build/start" \
+                -H "Content-Type: application/json" \
+                -d "{
+                  \"project_id\": \"$PROJECT_ID\",
+                  \"workflow_name\": \"$CM_WORKFLOW_NAME\",
+                  \"application_name\": \"$APPLICATION_NAME\",
+                  \"package_name\": \"$PACKAGE_NAME\",
+                  \"build_id\": \"$CM_BUILD_ID\",
+                  \"status\": \"started\"
+                }"
+      - name: Set Android SDK location
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
+      - name: Build Android app
+        script: |
+          ./gradlew $GRADLE_TASK
+      - name: Report build finish to Laravel
+        script: |
+          curl -s -X POST "$LARAVEL_WEBHOOK_URL/api/build/finish" \
+                -H "Content-Type: application/json" \
+                -d "{
+                  \"project_id\": \"$PROJECT_ID\",
+                  \"workflow_name\": \"$CM_WORKFLOW_NAME\",
+                  \"application_name\": \"$APPLICATION_NAME\",
+                  \"package_name\": \"$PACKAGE_NAME\",
+                  \"build_id\": \"$CM_BUILD_ID\",
+                  \"status\": \"finished\"
+                }"
+    artifacts:
+      - app/build/outputs/**/*.aab
+      - app/build/outputs/**/*.apk
+    publishing:
+      email:
+        recipients:
+          - $EMAIL_RECIPIENTS
+        notify:
+          success: true
+          failure: true
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: $GOOGLE_PLAY_TRACK  # beta, alpha, production
+      scripts:
+        - name: Publish artifacts to Laravel
+          script: |
+            # Получаем ссылку на артефакт
+            ARTIFACT_URL=$(echo $CM_ARTIFACT_LINKS | jq -r '.[] | select(.name | endswith(".aab") or endswith(".apk")) | .url')
+
+            # Создаем публичную ссылку на 7 дней
+            expiration_timestamp=$(date -v+7d +%s)
+            response=$(curl -s -H "Content-Type: application/json" \
+                                -H "x-auth-token: $CODEMAGIC_API_TOKEN" \
+                                -d "{\"expiresAt\": $expiration_timestamp}" \
+                                -X POST $ARTIFACT_URL/public-url)
+            public_url=$(echo $response | jq -r '.url')
+
+            # Отправляем информацию в Laravel
+            curl -s -X POST "$LARAVEL_WEBHOOK_URL/api/build/publish" \
+                  -H "Content-Type: application/json" \
+                  -d "{
+                    \"project_id\": \"$PROJECT_ID\",
+                    \"workflow_name\": \"$CM_WORKFLOW_NAME\",
+                    \"application_name\": \"$APPLICATION_NAME\",
+                    \"package_name\": \"$PACKAGE_NAME\",
+                    \"build_id\": \"$CM_BUILD_ID\",
+                    \"status\": \"published\",
+                    \"artifact_url\": \"$public_url\",
+                    \"track\": \"$GOOGLE_PLAY_TRACK\"
+                  }"
+
+  beta-to-release:
+    name: Promote Beta to Release
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      groups:
+        - google_play
+        - telegram
+        - laravel_webhook
+      vars:
+        APPLICATION_NAME: $APPLICATION_NAME
+        PACKAGE_NAME: $PACKAGE_NAME
+        LARAVEL_WEBHOOK_URL: $LARAVEL_WEBHOOK_URL
+        PROJECT_ID: $PROJECT_ID
+    publishing:
+      email:
+        recipients:
+          - $EMAIL_RECIPIENTS
+        notify:
+          success: true
+          failure: true
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: beta
+        release_promotion:
+          track: production
+      scripts:
+        - name: Report promotion to Laravel
+          script: |
+            curl -s -X POST "$LARAVEL_WEBHOOK_URL/api/build/promote" \
+                  -H "Content-Type: application/json" \
+                  -d "{
+                    \"project_id\": \"$PROJECT_ID\",
+                    \"workflow_name\": \"$CM_WORKFLOW_NAME\",
+                    \"application_name\": \"$APPLICATION_NAME\",
+                    \"package_name\": \"$PACKAGE_NAME\",
+                    \"status\": \"promoted_to_production\"
+                  }"
+
+  build-debug:
+    name: Build Debug APK
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      android_signing:
+        - system_app_manager
+      groups:
+        - telegram
+        - laravel_webhook
+      vars:
+        APPLICATION_NAME: $APPLICATION_NAME
+        PACKAGE_NAME: $PACKAGE_NAME
+        LARAVEL_WEBHOOK_URL: $LARAVEL_WEBHOOK_URL
+        PROJECT_ID: $PROJECT_ID
+      java: 21
+    scripts:
+      - name: Report debug build start
+        script: |
+          curl -s -X POST "$LARAVEL_WEBHOOK_URL/api/build/start" \
+                -H "Content-Type: application/json" \
+                -d "{
+                  \"project_id\": \"$PROJECT_ID\",
+                  \"workflow_name\": \"$CM_WORKFLOW_NAME\",
+                  \"application_name\": \"$APPLICATION_NAME\",
+                  \"package_name\": \"$PACKAGE_NAME\",
+                  \"build_id\": \"$CM_BUILD_ID\",
+                  \"status\": \"debug_started\"
+                }"
+      - name: Set Android SDK location
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
+      - name: Build Debug APK
+        script: |
+          ./gradlew assembleDebug
+    artifacts:
+      - app/build/outputs/**/*.apk
+    publishing:
+      scripts:
+        - name: Publish debug APK to Laravel
+          script: |
+            ARTIFACT_URL=$(echo $CM_ARTIFACT_LINKS | jq -r '.[] | select(.name | endswith(".apk")) | .url')
+            expiration_timestamp=$(date -v+3d +%s)
+            response=$(curl -s -H "Content-Type: application/json" \
+                                -H "x-auth-token: $CODEMAGIC_API_TOKEN" \
+                                -d "{\"expiresAt\": $expiration_timestamp}" \
+                                -X POST $ARTIFACT_URL/public-url)
+            public_url=$(echo $response | jq -r '.url')
+
+            curl -s -X POST "$LARAVEL_WEBHOOK_URL/api/build/publish" \
+                  -H "Content-Type: application/json" \
+                  -d "{
+                    \"project_id\": \"$PROJECT_ID\",
+                    \"workflow_name\": \"$CM_WORKFLOW_NAME\",
+                    \"application_name\": \"$APPLICATION_NAME\",
+                    \"package_name\": \"$PACKAGE_NAME\",
+                    \"build_id\": \"$CM_BUILD_ID\",
+                    \"status\": \"debug_published\",
+                    \"artifact_url\": \"$public_url\",
+                    \"track\": \"debug\"
+                  }"
