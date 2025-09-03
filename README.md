@@ -24,46 +24,125 @@ php artisan filament:install --panels
 
 ### 2. Настройка переменных окружения
 
+#### 🔑 Получение токенов и ключей:
+
+**Codemagic API Token:**
+1. Зайдите в [Codemagic](https://codemagic.io)
+2. User settings → API tokens → Create token
+3. Скопируйте токен
+
+**Telegram Bot Token:**
+1. Напишите [@BotFather](https://t.me/BotFather)
+2. `/newbot` → следуйте инструкциям
+3. Получите токен вида: `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`
+
+**Telegram Chat ID:**
+1. Напишите вашему боту
+2. Откройте: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
+3. Найдите `"chat":{"id":123456789}` в ответе
+
+**Google Play Service Account:**
+1. [Google Cloud Console](https://console.cloud.google.com/)
+2. APIs & Services → Credentials → Create Credentials → Service Account
+3. Создайте ключ в формате JSON
+4. В [Google Play Console](https://play.google.com/console/) → Setup → API access
+5. Свяжите проект и дайте права Release Manager
+
+**Webhook Secret Key:**
+```bash
+# Генерируем случайный ключ
+openssl rand -hex 32
+```
+
+#### 📝 Файл .env:
+
 ```env
 # Codemagic API
-CODEMAGIC_API_TOKEN=your_codemagic_token
-CODEMAGIC_APP_ID=your_app_id
+CODEMAGIC_API_TOKEN=cm_1234567890abcdef
+CODEMAGIC_APP_ID=your_app_id_here
 
 # Telegram Bot
-TELEGRAM_BOT_TOKEN=your_bot_token
-TELEGRAM_CHAT_ID=your_chat_id
-TELEGRAM_ADMIN_CHAT_ID=admin_chat_id
+TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+TELEGRAM_CHAT_ID=123456789
+TELEGRAM_ADMIN_CHAT_ID=987654321
 
 # Google Play Console
-GOOGLE_PLAY_SERVICE_ACCOUNT_JSON=path_to_service_account.json
+GOOGLE_PLAY_SERVICE_ACCOUNT_JSON=/path/to/service-account.json
 
 # Webhook Security
-WEBHOOK_SECRET_KEY=your_secret_key
+WEBHOOK_SECRET_KEY=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6
+
+# Email уведомления
+EMAIL_RECIPIENTS=developer@example.com,admin@example.com
 ```
+
+⚠️ **Важно:** Никогда не коммитьте .env файл в Git!
 
 ### 3. Настройка Codemagic
 
-1. Создайте приложение в Codemagic
-2. Скопируйте `codemagic.yaml` в корень вашего Android проекта
-3. Настройте переменные окружения в Codemagic:
-   - `APPLICATION_NAME` - название приложения
-   - `PACKAGE_NAME` - package name
-   - `BUILD_TYPE` - тип сборки (debug/release)
-   - `GRADLE_TASK` - gradle задача
-   - `LARAVEL_WEBHOOK_URL` - URL вашего Laravel приложения
-   - `PROJECT_ID` - ID проекта в Laravel
-   - `EMAIL_RECIPIENTS` - email для уведомлений
-   - `GOOGLE_PLAY_TRACK` - трек Google Play
+#### 📱 Создание приложения в Codemagic:
+
+1. Зайдите в [Codemagic](https://codemagic.io)
+2. Нажмите **Add application**
+3. Выберите **GitHub** и подключите ваш репозиторий
+4. Выберите ветку (обычно `main`)
+
+#### ⚙️ Настройка переменных окружения в Codemagic:
+
+В настройках приложения → **Environment variables** добавьте:
+
+| Переменная | Описание | Пример |
+|------------|----------|---------|
+| `APPLICATION_NAME` | Название приложения | My Awesome App |
+| `PACKAGE_NAME` | Package name | com.example.myapp |
+| `BUILD_TYPE` | Тип сборки | release |
+| `GRADLE_TASK` | Gradle задача | bundleRelease |
+| `LARAVEL_WEBHOOK_URL` | URL Laravel приложения | https://your-domain.com |
+| `PROJECT_ID` | ID проекта в Laravel | 1 |
+| `EMAIL_RECIPIENTS` | Email для уведомлений | developer@example.com |
+| `GOOGLE_PLAY_TRACK` | Трек Google Play | beta |
+
+#### 📄 Копирование codemagic.yaml:
+
+Скопируйте файл `codemagic.yaml` из этого репозитория в корень вашего Android проекта.
 
 ### 4. Настройка Telegram Bot
 
-1. Создайте бота через @BotFather
-2. Получите токен бота
-3. Настройте webhook:
+#### 🤖 Создание бота:
+
+1. Напишите [@BotFather](https://t.me/BotFather) в Telegram
+2. Отправьте `/newbot`
+3. Введите имя бота (например: "My CI/CD Bot")
+4. Введите username бота (например: "my_cicd_bot")
+5. Получите токен бота
+
+#### 🔗 Настройка webhook:
+
 ```bash
-curl -X POST "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
+curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
      -H "Content-Type: application/json" \
      -d '{"url": "https://your-domain.com/api/telegram/webhook"}'
+```
+
+#### 📱 Получение Chat ID:
+
+1. Напишите вашему боту любое сообщение
+2. Откройте в браузере: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
+3. Найдите в ответе: `"chat":{"id":123456789}`
+4. Скопируйте этот ID
+
+#### ⚙️ Настройка команд бота:
+
+```bash
+curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setMyCommands" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "commands": [
+         {"command": "start", "description": "Показать команды"},
+         {"command": "projects", "description": "Список проектов"},
+         {"command": "build_", "description": "Запустить сборку проекта"}
+       ]
+     }'
 ```
 
 ## 📱 Использование
@@ -157,11 +236,108 @@ curl -X POST "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
 
 5. Скачивайте готовые APK/AAB файлы
 
+## 🚀 Быстрый старт
+
+### Запуск системы за 5 минут:
+
+1. **Клонируйте репозиторий:**
+   ```bash
+   git clone https://github.com/flamedeluxe/apk-auto-builder.git
+   cd apk-auto-builder
+   ```
+
+2. **Запустите Laravel:**
+   ```bash
+   cd laravel-app
+   composer install
+   cp env.example .env
+   php artisan key:generate
+   php artisan migrate
+   php artisan serve
+   ```
+
+3. **Откройте админ панель:**
+   - URL: http://localhost:8000/admin
+   - Email: admin@example.com
+   - Пароль: password
+
+4. **Настройте переменные окружения** в `.env` файле
+
+5. **Создайте проект** в админ панели
+
+## 🔧 Troubleshooting
+
+### Частые проблемы:
+
+**❌ Ошибка "Could not open input file: artisan"**
+```bash
+# Решение: установите зависимости
+cd laravel-app
+composer install
+```
+
+**❌ Ошибка "Database connection failed"**
+```bash
+# Решение: настройте базу данных в .env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=android_cicd
+DB_USERNAME=root
+DB_PASSWORD=
+```
+
+**❌ Telegram Bot не отвечает**
+- Проверьте токен бота в `.env`
+- Убедитесь, что webhook настроен правильно
+- Проверьте Chat ID
+
+**❌ Codemagic не запускает сборку**
+- Проверьте API токен Codemagic
+- Убедитесь, что переменные окружения настроены
+- Проверьте права доступа к репозиторию
+
+**❌ Google Play публикация не работает**
+- Проверьте Service Account JSON файл
+- Убедитесь, что права Release Manager предоставлены
+- Проверьте настройки в Google Play Console
+
+### 📋 Чек-лист для отладки:
+
+- [ ] Laravel приложение запускается без ошибок
+- [ ] База данных подключена и миграции выполнены
+- [ ] Все переменные окружения настроены
+- [ ] Telegram Bot отвечает на команды
+- [ ] Codemagic может получить доступ к репозиторию
+- [ ] Google Play Console API настроен
+- [ ] Webhook'и доступны по HTTPS
+
 ## 🆘 Поддержка
 
-При возникновении проблем проверьте:
-1. Логи Laravel приложения
-2. Настройки переменных окружения
-3. Статус webhook'ов в Codemagic
-4. Настройки Telegram Bot
-5. Права доступа к Google Play Console
+При возникновении проблем:
+
+1. **Проверьте логи:**
+   ```bash
+   tail -f laravel-app/storage/logs/laravel.log
+   ```
+
+2. **Проверьте статус сервисов:**
+   - Laravel: http://localhost:8000
+   - Админ панель: http://localhost:8000/admin
+   - API: http://localhost:8000/api/build/start
+
+3. **Проверьте настройки:**
+   - Переменные окружения в `.env`
+   - Статус webhook'ов в Codemagic
+   - Настройки Telegram Bot
+   - Права доступа к Google Play Console
+
+4. **Создайте Issue** в [GitHub репозитории](https://github.com/flamedeluxe/apk-auto-builder/issues)
+
+## 📚 Дополнительные ресурсы
+
+- [Codemagic Documentation](https://docs.codemagic.io/)
+- [Laravel Documentation](https://laravel.com/docs)
+- [Filament Documentation](https://filamentphp.com/docs)
+- [Telegram Bot API](https://core.telegram.org/bots/api)
+- [Google Play Console API](https://developers.google.com/android-publisher)
